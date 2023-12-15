@@ -1,0 +1,27 @@
+---
+
+- name: Loops Playbook
+  hosts: k8s_masters[0]
+  become: yes
+  strategy: debug
+
+  tasks:
+
+  # - name: This command uptime
+  #   ansible.builtin.shell: uptime
+  #   register: result
+
+  # - name: print result variables
+  #   debug:
+  #     var: result
+
+  # - name: print result variables
+  #   debug:
+  #     var: result.stdout
+
+  - name: Test variables 
+    ansible.builtin.debug:
+      var: hostvars[groups['k8s_masters'][0]].join_path.stdout
+
+
+  

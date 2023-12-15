@@ -1,0 +1,144 @@
+- name: Add repo kubernetes
+  ansible.builtin.yum_repository:
+    name: kubernetes
+    description: "Base programs for k8s"
+    baseurl: "https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64"
+    gpgcheck: yes
+    gpgkey:
+      - "https://packages.cloud.google.com/yum/doc/yum-key.gpg"
+      - "https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg"
+
+- name: Docker repository for containerd
+  ansible.builtin.yum_repository:
+    name: docker
+    enabled: yes
+    baseurl: "https://download.docker.com/linux/centos/$releasever/$basearch/stable"
+    description: "Docker"
+    gpgcheck: yes
+    gpgkey:
+      - "https://download.docker.com/linux/centos/gpg"
+
+- name: Install packages yum
+  ansible.builtin.yum:
+    name:
+      - epel-release
+      - net-tools
+      - git
+      - wget
+      - bash-completion
+      - nfs-utils
+      - libselinux-python3
+      - python3
+      - tar
+      - chrony
+      - containerd
+      - kubectl-{{ kube_version }}-0.x86_64
+      - kubelet-{{ kube_version }}-0.x86_64
+      - kubeadm-{{ kube_version }}-0.x86_64
+    state: latest
+
+- name: Enable NTP service
+  ansible.builtin.service:
+    name: chronyd
+    state: started
+    enabled: yes
+
+# - name: Disable firewalld
+#   ansible.builtin.service:
+#     name: firewalld
+#     state: stopped
+#     enabled: no
+
+- name: Check is swap enable
+  ansible.builtin.shell: swapon
+  register: swap_present
+  changed_when: false
+  ignore_errors: true
+
+- name: If swap is enabled - disable it
+  ansible.builtin.shell: swapoff -a
+  when: swap_present.stdout != ""
+
+- name: Disable SWAP in fstab
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: '^([^#].*\s*swap\s*.*)$'
+    replace: '# \1'
+
+- name: Check Disable SELinux
+  selinux:
+    state: disabled
+  register: selinux_ret
+
+- name: Disable SELinux
+  ansible.builtin.shell: setenforce 0
+  when: selinux_ret.reboot_required
+
+- name: Remove containerd config.toml
+  file:
+    path: /etc/containerd/config.toml
+    state: absent
+
+- name: Enable Containerd and Kubelet
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+  with_items:
+    - containerd
+    - kubelet
+
+- name: Set crictl.yaml
+  ansible.builtin.copy:
+    src: crictl.yaml
+    dest: /etc/crictl.yaml
+    owner: root
+    mode: 644
+
+- name: Load modules
+  community.general.modprobe:
+    name: br_netfilter
+
+- name: Load module permanet
+  ansible.builtin.copy:
+    src: modules-kubernetes.conf
+    dest: /etc/modules-load.d/modules-kubernetes.conf
+
+- name: Set Sysctl on all nodes
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+  with_items:
+    - name: net.ipv4.ip_forward
+      value: 1
+    - name: net.bridge.bridge-nf-call-iptables
+      value: 1
+
+- block:
+    - name: Download calicoctl
+      ansible.builtin.get_url:
+        url: https://github.com/projectcalico/calico/releases/latest/download/calicoctl-linux-amd64
+        dest: /usr/local/bin/calicoctl
+        mode: "0754"
+
+    - name: Unarchive a file helm
+      ansible.builtin.unarchive:
+        src: https://get.helm.sh/helm-canary-linux-amd64.tar.gz
+        dest: /usr/local/bin
+        remote_src: yes
+        extra_opts:
+          - "--strip-components=1"
+
+    - name: Install Kubectl completion bash
+      ansible.builtin.shell: |
+        echo 'source <(kubectl completion bash)' >>~/.bashrc
+        kubectl completion bash >/etc/bash_completion.d/kubectl
+
+    - name: Install K9S
+      ansible.builtin.shell: |
+        LATEST_K9S_VERSION=$(curl -s https://api.github.com/repos/derailed/k9s/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        wget -qO- https://github.com/derailed/k9s/releases/download/${LATEST_K9S_VERSION}/k9s_Linux_amd64.tar.gz | tar zxvf -  -C /tmp/
+        mv /tmp/k9s /usr/local/bin
+
+  when: inventory_hostname in groups['k8s_masters']

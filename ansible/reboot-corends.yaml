@@ -1,0 +1,20 @@
+---
+
+- name: Loops Playbook
+  hosts: k8s_masters[0]
+  become: yes
+
+  tasks:
+  - name: Pause for 10 seconds
+    ansible.builtin.pause:
+      seconds: 30
+
+  - name: Reboot coredns, change worker nodes
+    ansible.builtin.shell: kubectl -n kube-system rollout restart deployment coredns
+
+  - name: Pause for 10 seconds
+    ansible.builtin.pause:
+      seconds: 10
+
+  - name: Reboot coredns, change worker nodes
+    ansible.builtin.shell: kubectl -n kube-system rollout restart deployment coredns

@@ -1,0 +1,63 @@
+---
+- name: Loops Playbook
+  hosts: all
+  become: yes
+  ignore_errors: true
+
+  tasks:
+    - name: Add hosts from hosts.ini to /etc/hosts
+      ansible.builtin.lineinfile:
+        dest: /etc/hosts
+        line: "{{ hostvars[item].ansible_host }} {{ item }} {{ item.split('.')[0] }}"
+        state: present
+      with_items: "{{ groups['k8s_masters'] + groups['k8s_workers'] }}"
+    # - name: Create proxy environment
+    #   copy:
+    #     dest: /etc/environment
+    #     content: |
+    #       export http_proxy=http://proxy.darveter.com:3128
+    #       export https_proxy=http://proxy.darveter.com:3128
+    #       export no_proxy="pki.darveter.com,192.168.68.0/24,10.77.138.0/24,10.102.34.0/24,git.darveter.com,localhost,192.168.56.0/24,10.233.0.0/18,10.233.64.0/18"
+    #       export HTTP_PROXY=http://proxy.darveter.com:3128
+    #       export HTTPS_PROXY=http://proxy.darveter.com:3128
+    #       export NO_PROXY="pki.darveter.com,192.168.68.0/24,10.77.138.0/24,10.102.34.0/24,git.darveter.com,localhost,192.168.56.0/24,10.233.0.0/18,10.233.64.0/18"
+
+    # - name: Replace proxy yum
+    #   ansible.builtin.lineinfile:
+    #     path: /etc/yum.conf
+    #     line: proxy=http://proxy.darveter.com:3128
+
+    # - name: Replace proxy containerd
+    #   ansible.builtin.blockinfile:
+    #     path: /usr/lib/systemd/system/containerd.service
+    #     insertafter: '\[Service\]'
+    #     block: |
+    #       Environment="HTTP_PROXY=http://proxy.darveter.com:3128"
+    #       Environment="HTTPS_PROXY=http://proxy.darveter.com:3128"
+    #       Environment="NO_PROXY=pki.darveter.com,192.168.68.0/24,10.77.138.0/24,10.102.34.0/24,git.darveter.com,localhost,192.168.56.0/24,10.233.0.0/18,10.233.64.0/18"
+
+    - name: Just force systemd to reread configs
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Stopped containerd
+      ansible.builtin.service:
+        name: containerd
+        state: stopped
+
+    - name: Started containerd
+      ansible.builtin.service:
+        name: containerd
+        state: started
+
+    # - name: Replace chronyc time
+    #   ansible.builtin.blockinfile:
+    #     path: /etc/chrony.conf
+    #     insertafter: "# Please"
+    #     block: |
+    #       server time.darveter.com iburst
+
+    - name: Restarted chronyd
+      ansible.builtin.service:
+        name: chronyd
+        state: restarted

@@ -1,0 +1,50 @@
+---
+- name: Set Sysctl on master nodes for Haproxy
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+  with_items:
+    - name: net.ipv4.ip_nonlocal_bind
+      value: 1
+
+- name: Install packages RedHat
+  ansible.builtin.yum:
+    name:
+      - keepalived
+      - haproxy
+      - psmisc # killall for keepalived
+    state: present
+
+- name: Copy keepalived.conf to master
+  ansible.builtin.template:
+    src: keepalived.j2
+    dest: /etc/keepalived/keepalived.conf
+  register: keepalived_conf
+
+- name: Copy haproxy haproxy.cfg
+  ansible.builtin.template:
+    src: haproxy.j2
+    dest: /etc/haproxy/haproxy.cfg
+  register: haproxy_conf
+
+- name: Enable keepalived and haproxy
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+  with_items:
+    - keepalived
+    - haproxy
+
+- name: Restart keepalived
+  ansible.builtin.service:
+    name: keepalived
+    state: restarted
+  when: keepalived_conf.changed
+
+- name: Restart haproxy
+  ansible.builtin.service:
+    name: haproxy
+    state: restarted
+  when: haproxy_conf.changed

@@ -1,0 +1,49 @@
+---
+stages:
+  - test-variables
+  - install-python3
+  - install-proxy
+  - install-cluster
+  - reboot-corends
+
+
+install-python3:
+  stage: install-python3
+  script:
+    - ansible-playbook  -i hosts.ini ansible/install-python3.yaml -vvv
+  when: manual
+  tags:
+  - ansible
+
+
+install-cluster:
+  stage: install-cluster
+  script:
+    - ansible-playbook  -i hosts.ini ansible/install-cluster.yaml
+  when: manual
+  tags:
+  - ansible
+
+install-proxy:
+  stage: install-proxy
+  script:
+    - ansible-playbook  -i hosts.ini ansible/install-proxy.yaml -vvv
+  when: manual
+  tags:
+  - ansible
+
+reboot-corends:
+  stage: reboot-corends
+  script:
+    - ansible-playbook  -i hosts.ini ansible/reboot-corends.yaml -vvv
+  when: manual 
+  tags:
+  - ansible
+
+test-variables:
+  stage: test-variables
+  script:
+    - ansible-playbook  -i hosts.ini ansible/test-variables.yaml -vvv
+  when: manual
+  tags:
+  - ansible

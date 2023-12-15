@@ -1,0 +1,39 @@
+---
+- name: Checking for an odd number of nodes.
+  hosts: groups['k8s_masters'][0]
+  tasks:
+    - debug:
+        msg: "Abort. Аn even number of nodes"
+      failed_when: groups['k8s_masters'] | length | int is divisibleby 2
+
+- name: Install proxy package manager yum and /etc/environment
+  ansible.builtin.import_playbook: install-proxy.yaml
+
+- name: Install packages
+  hosts: k8s_cluster
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+  roles:
+    - dependence-hosts
+
+- name: Install proxy containerd service
+  ansible.builtin.import_playbook: install-proxy.yaml
+
+- name: Install Control nodes
+  hosts: k8s_masters
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+  roles:
+    - role: ha
+      when: ha_cluster_virtual_ip is defined and ha_cluster_virtual_ip != ""
+    - role: master
+      when: inventory_hostname == groups['k8s_masters'][0]
+    - role: second_controls
+
+- name: Install worker nodes
+  hosts: groups['k8s_masters'][0],k8s_workers
+  roles:
+    - workers
+
+- name: Reboot coredns, change worker nodes
+  ansible.builtin.import_playbook: reboot-corends.yaml
